@@ -4,29 +4,18 @@
 //
 //  Created by Srijan Kyasa on 7/20/26.
 //
+//  MVP UI shell. The UI runs on sample data (see SampleData.swift); the
+//  Supabase backend + SwiftData/remote persistence layer comes later per
+//  Deliverable 17.
+//
 
 import SwiftUI
-import SwiftData
 
 @main
 struct BookShareApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
-    }()
-
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
         }
-        .modelContainer(sharedModelContainer)
     }
 }
