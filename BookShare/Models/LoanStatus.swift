@@ -18,6 +18,29 @@ enum LoanStatus: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    /// Map from the Postgres `loan_status` enum values (snake_case).
+    init?(dbValue: String) {
+        switch dbValue {
+        case "available": self = .available
+        case "requested": self = .requested
+        case "accepted":  self = .accepted
+        case "on_loan":   self = .onLoan
+        case "returned":  self = .returned
+        default:          return nil
+        }
+    }
+
+    /// Postgres `loan_status` value for this case.
+    var dbValue: String {
+        switch self {
+        case .available: return "available"
+        case .requested: return "requested"
+        case .accepted:  return "accepted"
+        case .onLoan:    return "on_loan"
+        case .returned:  return "returned"
+        }
+    }
+
     /// Visual tone: sage = actionable-positive, neutral = passive,
     /// terracotta tint = needs attention.
     enum Tone { case positive, passive, attention }

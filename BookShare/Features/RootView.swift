@@ -2,44 +2,76 @@
 //  RootView.swift
 //  BookShare
 //
-//  The 4-tab shell (go_router equivalent). Onboarding gates the shell on
-//  first launch; after finishing, the neighbor lands on Discover.
+//  Top-level routing, driven by AuthService.state:
+//    loading → splash · signedOut → onboarding · needsLocation → address step · ready → tabs
 //
 
 import SwiftUI
 
-struct RootView: View {
-    @State private var onboarded = RootView.launchOnboarded
-    @State private var tab: AppTab = RootView.launchTab
-
-    /// QA hook: `SIMCTL_CHILD_BOOTSTRAP=home xcrun simctl launch …` skips
-    /// onboarding and opens straight to a tab. No effect in normal launches.
-    private static var bootstrap: String? {
-        ProcessInfo.processInfo.environment["BOOTSTRAP"]?.lowercased()
+/// Launch-time flags. `BOOTSTRAP=discover|home|shelf|profile` opens the tab shell
+/// on sample data with no backend — handy for UI work without the stack running.
+enum AppLaunch {
+    private static func env(_ key: String) -> String? {
+        ProcessInfo.processInfo.environment[key]?.lowercased()
     }
-    static var launchOnboarded: Bool { bootstrap != nil }
-    static var launchTab: AppTab {
-        switch bootstrap {
+    /// BOOTSTRAP forces the offline sample-data shell (no backend).
+    static var offlinePreview: Bool { env("BOOTSTRAP") != nil }
+    /// START_TAB picks the initial tab on the real (signed-in) app; BOOTSTRAP does the same for offline.
+    static var tab: AppTab {
+        switch env("BOOTSTRAP") ?? env("START_TAB") {
         case "home":    return .home
         case "shelf":   return .shelf
         case "profile": return .profile
         default:        return .discover
         }
     }
+    /// SCAN_DEMO auto-opens the scanner on the Shelf (for screenshot verification).
+    static var scanDemo: Bool { env("SCAN_DEMO") != nil }
+}
+
+struct RootView: View {
+    @Environment(AuthService.self) private var auth
+    @State private var tab: AppTab = AppLaunch.tab
 
     var body: some View {
-        if onboarded {
-            MainShell(tab: $tab)
-                .transition(.opacity)
-        } else {
-            OnboardingFlow {
-                withAnimation(.easeInOut) { onboarded = true }
+        Group {
+            if AppLaunch.offlinePreview {
+                MainShell(tab: $tab)                 // sample-data UI, no auth
+            } else {
+                switch auth.state {
+                case .loading:       SplashView()
+                case .signedOut:     OnboardingFlow()
+                case .needsLocation: LocationStep()
+                case .ready:         MainShell(tab: $tab)
+                }
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: auth.state)
+    }
+}
+
+private struct SplashView: View {
+    var body: some View {
+        ZStack {
+            BSColor.paper.ignoresSafeArea()
+            VStack(spacing: BSSpace.l) {
+                HStack(spacing: 5) {
+                    ForEach(["8E6F4E", "6B4A3A", "55663F", "A8431F", "3E5266"], id: \.self) { hex in
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(Color(hex: hex))
+                            .frame(width: 18, height: 52)
+                    }
+                }
+                Text("BookShare")
+                    .font(BSFont.serif(26, .bold))
+                    .foregroundStyle(BSColor.ink)
+                ProgressView().tint(BSColor.rust)
             }
         }
     }
 }
 
-private struct MainShell: View {
+struct MainShell: View {
     @Binding var tab: AppTab
 
     var body: some View {
@@ -59,5 +91,3 @@ private struct MainShell: View {
         .background(BSColor.paper)
     }
 }
-
-#Preview { RootView() }

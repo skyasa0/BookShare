@@ -13,6 +13,7 @@ struct BSField: View {
     let placeholder: String
     @Binding var text: String
     var keyboard: UIKeyboardType = .default
+    var secure: Bool = false
 
     @FocusState private var focused: Bool
 
@@ -20,8 +21,7 @@ struct BSField: View {
         VStack(alignment: .leading, spacing: BSSpace.s) {
             Text(label).bsFieldLabel()
 
-            TextField("", text: $text, prompt:
-                Text(placeholder).foregroundColor(BSColor.placeholder))
+            field
                 .font(BSFont.sans(15))
                 .foregroundStyle(BSColor.ink)
                 .keyboardType(keyboard)
@@ -36,6 +36,16 @@ struct BSField: View {
                                       lineWidth: focused ? 2 : 1)
                 )
                 .animation(.easeOut(duration: 0.15), value: focused)
+        }
+    }
+
+    @ViewBuilder
+    private var field: some View {
+        let prompt = Text(placeholder).foregroundColor(BSColor.placeholder)
+        if secure {
+            SecureField("", text: $text, prompt: prompt)
+        } else {
+            TextField("", text: $text, prompt: prompt)
         }
     }
 }

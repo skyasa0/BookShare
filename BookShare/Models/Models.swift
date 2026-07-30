@@ -10,20 +10,50 @@
 import SwiftUI
 
 struct Book: Identifiable, Hashable {
-    let id = UUID()
+    let id: UUID
     let title: String
     let author: String
     let genre: Genre
-    let coverHex: String        // stand-in for Open Library cover art
+    let coverHex: String        // fallback color when no cover art
+    let coverURL: URL?          // real cover art (from ISBN metadata), when available
     let distanceMiles: Double   // rounded distance, never raw coordinates
     let ownerName: String
     let ownerVerified: Bool
     let rating: Double
     var status: LoanStatus
 
+    init(id: UUID = UUID(), title: String, author: String, genre: Genre,
+         coverHex: String, coverURL: URL? = nil, distanceMiles: Double, ownerName: String,
+         ownerVerified: Bool, rating: Double, status: LoanStatus) {
+        self.id = id; self.title = title; self.author = author; self.genre = genre
+        self.coverHex = coverHex; self.coverURL = coverURL; self.distanceMiles = distanceMiles
+        self.ownerName = ownerName; self.ownerVerified = ownerVerified
+        self.rating = rating; self.status = status
+    }
+
     enum Genre: String, CaseIterable, Identifiable {
         case all = "All", fiction = "Fiction", nonfiction = "Nonfiction", kids = "Kids"
         var id: String { rawValue }
+
+        /// Map from the Postgres `book_genre` enum values.
+        init?(dbValue: String) {
+            switch dbValue {
+            case "fiction":    self = .fiction
+            case "nonfiction": self = .nonfiction
+            case "kids":       self = .kids
+            default:           return nil
+            }
+        }
+
+        /// Postgres `book_genre` value (nil for `.all`, which isn't a stored genre).
+        var dbValue: String? {
+            switch self {
+            case .fiction:    return "fiction"
+            case .nonfiction: return "nonfiction"
+            case .kids:       return "kids"
+            case .all:        return nil
+            }
+        }
     }
 
     var coverColor: Color { Color(hex: coverHex) }

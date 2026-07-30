@@ -16,7 +16,7 @@ struct BSBookCard: View {
 
     var body: some View {
         HStack(spacing: BSSpace.m) {
-            BookCover(color: book.coverColor, title: book.title)
+            BookCover(color: book.coverColor, title: book.title, coverURL: book.coverURL)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(book.title)
@@ -67,10 +67,29 @@ struct BSBookCard: View {
 struct BookCover: View {
     let color: Color
     let title: String
+    /// Real cover art (from ISBN metadata). When nil, the colored spine placeholder shows.
+    var coverURL: URL? = nil
     var width: CGFloat = 56
     var height: CGFloat = 74
 
     var body: some View {
+        Group {
+            if let coverURL {
+                CachedAsyncImage(url: coverURL, contentMode: .fill)
+                    .frame(width: width, height: height)
+                    .clipped()
+                    .background(color)
+            } else {
+                placeholder
+            }
+        }
+        .frame(width: width, height: height)
+        .clipShape(RoundedRectangle(cornerRadius: BSRadius.s))
+        .shadow(color: .black.opacity(0.12), radius: 3, x: 0, y: 2)
+        .accessibilityLabel("Cover of \(title)")
+    }
+
+    private var placeholder: some View {
         ZStack(alignment: .leading) {
             RoundedRectangle(cornerRadius: BSRadius.s)
                 .fill(color)
@@ -83,10 +102,6 @@ struct BookCover: View {
                 .foregroundStyle(.white.opacity(0.9))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: width, height: height)
-        .clipShape(RoundedRectangle(cornerRadius: BSRadius.s))
-        .shadow(color: .black.opacity(0.12), radius: 3, x: 0, y: 2)
-        .accessibilityLabel("Cover of \(title)")
     }
 }
 

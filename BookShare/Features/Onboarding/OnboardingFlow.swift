@@ -2,43 +2,34 @@
 //  OnboardingFlow.swift
 //  BookShare
 //
-//  Welcome + 2-step onboarding (Deliverable 10/11). The app absorbs the
-//  awkwardness (§07): privacy promises are stated in plain sentences, right
-//  where the risk is felt.
+//  Pre-auth flow (Deliverable 10/11): welcome → choose method → email or phone.
+//  Apple/Google use Supabase web OAuth. The app absorbs the awkwardness (§07):
+//  privacy promises are stated plainly, right where the risk is felt.
+//
+//  After authentication the auth state advances to `.needsLocation`, and RootView
+//  swaps in LocationStep — so this file ends at "signed in", not "onboarded".
 //
 
 import SwiftUI
 
 struct OnboardingFlow: View {
-    /// Called when the neighbor finishes onboarding.
-    let onFinish: () -> Void
+    @State private var path: [Route] = []
 
-    private enum Stage { case welcome, details, address }
-    @State private var stage: Stage = .welcome
-
-    @State private var name = ""
-    @State private var phone = ""
-    @State private var address = ""
+    enum Route: Hashable { case methods, email, phone, otp(phone: String) }
 
     var body: some View {
-        ZStack {
-            BSColor.paper.ignoresSafeArea()
-            switch stage {
-            case .welcome:
-                WelcomeScreen { withAnimation { stage = .details } }
-                    .transition(.opacity)
-            case .details:
-                DetailsScreen(name: $name, phone: $phone,
-                              onBack: { withAnimation { stage = .welcome } },
-                              onNext: { withAnimation { stage = .address } })
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
-            case .address:
-                AddressScreen(address: $address,
-                              onBack: { withAnimation { stage = .details } },
-                              onFinish: onFinish)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
-            }
+        NavigationStack(path: $path) {
+            WelcomeScreen(onStart: { path.append(.methods) })
+                .navigationDestination(for: Route.self) { route in
+                    switch route {
+                    case .methods:          AuthMethodsScreen(path: $path)
+                    case .email:            EmailAuthScreen()
+                    case .phone:            PhoneAuthScreen(path: $path)
+                    case .otp(let phone):   OTPScreen(phone: phone)
+                    }
+                }
         }
+        .tint(BSColor.rust)
     }
 }
 
@@ -50,12 +41,11 @@ private struct WelcomeScreen: View {
     var body: some View {
         VStack(alignment: .leading, spacing: BSSpace.l) {
             Spacer()
-            // Little "shelf" motif from stacked covers.
             HStack(spacing: 6) {
                 ForEach(["8E6F4E", "6B4A3A", "55663F", "A8431F", "3E5266"], id: \.self) { hex in
                     RoundedRectangle(cornerRadius: 4)
                         .fill(Color(hex: hex))
-                        .frame(width: 30, height: CGFloat.random(in: 66...96))
+                        .frame(width: 30, height: [66, 92, 78, 96, 72][["8E6F4E","6B4A3A","55663F","A8431F","3E5266"].firstIndex(of: hex)!])
                 }
             }
             .frame(maxWidth: .infinity, alignment: .center)
@@ -71,124 +61,270 @@ private struct WelcomeScreen: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             Spacer()
-            BSButton(title: "Create account", action: onStart)
-            BSButton(title: "I already have an account", style: .quiet, action: onStart)
+            BSButton(title: "Get started", action: onStart)
         }
         .padding(.horizontal, BSSpace.xl)
         .padding(.vertical, BSSpace.xl)
+        .bsScreen()
     }
 }
 
-// MARK: - Step 1 · details
+// MARK: - Method chooser
 
-private struct DetailsScreen: View {
-    @Binding var name: String
-    @Binding var phone: String
-    let onBack: () -> Void
-    let onNext: () -> Void
-
-    var body: some View {
-        OnboardingScaffold(step: 1, title: "First, the basics", onBack: onBack) {
-            VStack(alignment: .leading, spacing: BSSpace.l) {
-                BSField(label: "Name", placeholder: "Full name", text: $name)
-                BSField(label: "Phone", placeholder: "+1 (___) ___-____",
-                        text: $phone, keyboard: .phonePad)
-                PrivacyNote("We verify your number so neighbors know you're real. It's never shown on your listings.")
-            }
-        } footer: {
-            BSButton(title: "Continue", action: onNext)
-        }
-    }
-}
-
-// MARK: - Step 2 · address
-
-private struct AddressScreen: View {
-    @Binding var address: String
-    let onBack: () -> Void
-    let onFinish: () -> Void
+private struct AuthMethodsScreen: View {
+    @Binding var path: [OnboardingFlow.Route]
+    @Environment(AuthService.self) private var auth
+    @State private var oauthBusy: AuthService.OAuthProvider?
+    @State private var error: String?
 
     var body: some View {
-        OnboardingScaffold(step: 2, title: "Where do you live?", onBack: onBack) {
-            VStack(alignment: .leading, spacing: BSSpace.l) {
-                Text("We use your location to find books nearby. Your exact address is never shown to other users.")
-                    .font(BSFont.body)
-                    .foregroundStyle(BSColor.muted)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                BSButton(title: "Use current location", icon: "location.fill",
-                         style: .ghost) { address = "Cobble Hill, Brooklyn" }
-
-                HStack {
-                    Rectangle().fill(BSColor.line).frame(height: 1)
-                    Text("or enter it").font(BSFont.sans(12)).foregroundStyle(BSColor.muted)
-                    Rectangle().fill(BSColor.line).frame(height: 1)
-                }
-                .padding(.vertical, 4)
-
-                BSField(label: "Home address", placeholder: "Street, city", text: $address)
-                PrivacyNote("Neighbors only ever see an approximate distance — like \"0.3 mi\" — computed on our servers.")
-            }
-        } footer: {
-            BSButton(title: "Finish setup", action: onFinish)
-        }
-    }
-}
-
-// MARK: - Shared scaffold + privacy note
-
-private struct OnboardingScaffold<Content: View, Footer: View>: View {
-    let step: Int
-    let title: String
-    let onBack: () -> Void
-    @ViewBuilder let content: Content
-    @ViewBuilder let footer: Footer
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Button(action: onBack) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(BSColor.ink)
-                        .frame(width: 44, height: 44, alignment: .leading)
-                }
-                Spacer()
-                BSStepChip(current: step, total: 2)
-            }
-            .padding(.top, BSSpace.s)
-
-            Text(title)
+        VStack(alignment: .leading, spacing: BSSpace.m) {
+            Text("Join your\nneighborhood")
                 .font(BSFont.display)
                 .foregroundStyle(BSColor.ink)
-                .padding(.top, BSSpace.l)
-                .padding(.bottom, BSSpace.xl)
+                .padding(.top, BSSpace.s)
+                .padding(.bottom, BSSpace.s)
 
-            content
+            BSButton(title: "Continue with Apple", icon: "apple.logo", style: .ghost,
+                     isLoading: oauthBusy == .apple) { oauth(.apple) }
+            BSButton(title: "Continue with Google", icon: "g.circle", style: .ghost,
+                     isLoading: oauthBusy == .google) { oauth(.google) }
+
+            HStack {
+                Rectangle().fill(BSColor.line).frame(height: 1)
+                Text("or").font(BSFont.sans(12)).foregroundStyle(BSColor.muted)
+                Rectangle().fill(BSColor.line).frame(height: 1)
+            }.padding(.vertical, BSSpace.xs)
+
+            BSButton(title: "Continue with email", icon: "envelope") { path.append(.email) }
+            BSButton(title: "Continue with phone", icon: "phone", style: .ghost) { path.append(.phone) }
+
+            if let error {
+                Text(error).font(BSFont.sans(13)).foregroundStyle(BSColor.rustDeep)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Spacer()
-            footer
+            PrivacyNote("We verify every neighbor and never show your exact address. You choose what to share.")
         }
         .padding(.horizontal, BSSpace.xl)
         .padding(.bottom, BSSpace.xl)
+        .bsScreen()
+        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func oauth(_ provider: AuthService.OAuthProvider) {
+        oauthBusy = provider; error = nil
+        Task {
+            do { try await auth.signIn(with: provider) }
+            catch {
+                self.error = "\(provider.label) sign-in isn't configured yet. Add its keys in Supabase (see SETUP.md), or use email or phone."
+            }
+            oauthBusy = nil
+        }
     }
 }
 
-private struct PrivacyNote: View {
+// MARK: - Email (sign up / sign in + forgot password)
+
+private struct EmailAuthScreen: View {
+    @Environment(AuthService.self) private var auth
+    @State private var isSignUp = true
+    @State private var name = ""
+    @State private var email = ""
+    @State private var password = ""
+    @State private var busy = false
+    @State private var notice: String?
+    @State private var error: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: BSSpace.l) {
+                Text(isSignUp ? "Create your account" : "Welcome back")
+                    .font(BSFont.display)
+                    .foregroundStyle(BSColor.ink)
+                    .padding(.top, BSSpace.s)
+
+                if isSignUp {
+                    BSField(label: "Name", placeholder: "Full name", text: $name)
+                }
+                BSField(label: "Email", placeholder: "you@email.com", text: $email, keyboard: .emailAddress)
+                    .textInputAutocapitalization(.never)
+                BSField(label: "Password", placeholder: "At least 6 characters", text: $password, secure: true)
+
+                if !isSignUp {
+                    Button("Forgot password?") { sendReset() }
+                        .font(BSFont.sans(13, .semibold))
+                        .foregroundStyle(BSColor.rust)
+                }
+
+                if let notice {
+                    InlineBanner(text: notice, tone: .positive)
+                }
+                if let error {
+                    InlineBanner(text: error, tone: .attention)
+                }
+
+                BSButton(title: isSignUp ? "Create account" : "Log in", isLoading: busy) { submit() }
+
+                Button(isSignUp ? "I already have an account" : "Create a new account") {
+                    withAnimation { isSignUp.toggle(); notice = nil; error = nil }
+                }
+                .font(BSFont.sans(14, .semibold))
+                .foregroundStyle(BSColor.rust)
+                .frame(maxWidth: .infinity)
+
+                if isSignUp {
+                    PrivacyNote("Your email is only used to sign in and send loan reminders — never shown to other neighbors.")
+                }
+            }
+            .padding(.horizontal, BSSpace.xl)
+            .padding(.bottom, BSSpace.xl)
+        }
+        .bsScreen()
+        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func submit() {
+        busy = true; error = nil; notice = nil
+        Task {
+            do {
+                if isSignUp {
+                    try await auth.signUpEmail(name: name, email: email, password: password)
+                } else {
+                    try await auth.signInEmail(email: email, password: password)
+                }
+                // On success, auth.state advances and RootView swaps the screen.
+            } catch {
+                self.error = error.localizedDescription
+            }
+            busy = false
+        }
+    }
+
+    private func sendReset() {
+        guard !email.isEmpty else { error = "Enter your email above first, then tap Forgot password."; return }
+        error = nil
+        Task {
+            do {
+                try await auth.sendPasswordReset(email: email)
+                notice = "Check your email for a reset link. (Local dev: it's in Mailpit at 127.0.0.1:54324.)"
+            } catch { self.error = error.localizedDescription }
+        }
+    }
+}
+
+// MARK: - Phone → OTP
+
+private struct PhoneAuthScreen: View {
+    @Binding var path: [OnboardingFlow.Route]
+    @Environment(AuthService.self) private var auth
+    @State private var phone = ""
+    @State private var busy = false
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: BSSpace.l) {
+            Text("What's your\nphone number?")
+                .font(BSFont.display)
+                .foregroundStyle(BSColor.ink)
+                .padding(.top, BSSpace.s)
+
+            BSField(label: "Phone", placeholder: "+1 (555) 555-0100", text: $phone, keyboard: .phonePad)
+
+            if let error { InlineBanner(text: error, tone: .attention) }
+
+            BSButton(title: "Send verification code", isLoading: busy) { send() }
+            Spacer()
+            PrivacyNote("We text a one-time code to confirm your number. It's never shown on your listings.")
+        }
+        .padding(.horizontal, BSSpace.xl)
+        .padding(.bottom, BSSpace.xl)
+        .bsScreen()
+        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func send() {
+        busy = true; error = nil
+        Task {
+            do {
+                try await auth.startPhoneOTP(phone: phone)
+                path.append(.otp(phone: phone))
+            } catch { self.error = error.localizedDescription }
+            busy = false
+        }
+    }
+}
+
+private struct OTPScreen: View {
+    let phone: String
+    @Environment(AuthService.self) private var auth
+    @State private var code = ""
+    @State private var busy = false
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: BSSpace.l) {
+            BSStepChip(current: 2, total: 2).padding(.top, BSSpace.s)
+            Text("Enter the code")
+                .font(BSFont.display)
+                .foregroundStyle(BSColor.ink)
+            Text("We sent a 6-digit code to \(phone).")
+                .font(BSFont.body).foregroundStyle(BSColor.muted)
+
+            BSField(label: "Verification code", placeholder: "123456", text: $code, keyboard: .numberPad)
+
+            if let error { InlineBanner(text: error, tone: .attention) }
+
+            BSButton(title: "Verify", isLoading: busy) { verify() }
+            Spacer()
+        }
+        .padding(.horizontal, BSSpace.xl)
+        .padding(.bottom, BSSpace.xl)
+        .bsScreen()
+        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func verify() {
+        busy = true; error = nil
+        Task {
+            do { try await auth.verifyPhoneOTP(phone: phone, code: code) }
+            catch { self.error = error.localizedDescription }
+            busy = false
+        }
+    }
+}
+
+// MARK: - Shared bits
+
+/// Sage/attention inline message under a form.
+struct InlineBanner: View {
+    enum Tone { case positive, attention }
+    let text: String
+    let tone: Tone
+    var body: some View {
+        HStack(alignment: .top, spacing: BSSpace.s) {
+            Image(systemName: tone == .positive ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                .foregroundStyle(tone == .positive ? BSColor.sage : BSColor.rustDeep)
+            Text(text).font(BSFont.sans(13)).foregroundStyle(BSColor.ink)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(BSSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background((tone == .positive ? BSColor.sageBg : BSColor.rustSoft).opacity(0.55))
+        .clipShape(RoundedRectangle(cornerRadius: BSRadius.m))
+    }
+}
+
+struct PrivacyNote: View {
     let text: String
     init(_ text: String) { self.text = text }
-
     var body: some View {
         HStack(alignment: .top, spacing: BSSpace.s) {
             Image(systemName: "lock.fill")
-                .font(.system(size: 12))
-                .foregroundStyle(BSColor.sage)
-                .padding(.top, 2)
+                .font(.system(size: 12)).foregroundStyle(BSColor.sage).padding(.top, 2)
             Text(text)
-                .font(BSFont.sans(13))
-                .foregroundStyle(BSColor.muted)
-                .lineSpacing(2)
-                .fixedSize(horizontal: false, vertical: true)
+                .font(BSFont.sans(13)).foregroundStyle(BSColor.muted)
+                .lineSpacing(2).fixedSize(horizontal: false, vertical: true)
         }
         .padding(BSSpace.m)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -196,5 +332,3 @@ private struct PrivacyNote: View {
         .clipShape(RoundedRectangle(cornerRadius: BSRadius.m))
     }
 }
-
-#Preview { OnboardingFlow(onFinish: {}) }

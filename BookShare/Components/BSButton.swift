@@ -15,13 +15,20 @@ struct BSButton: View {
     var icon: String? = nil
     var style: Style = .primary
     var fullWidth: Bool = true
+    var isLoading: Bool = false
     let action: () -> Void
+
+    @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: BSSpace.s) {
-                if let icon { Image(systemName: icon) }
-                Text(title)
+                if isLoading {
+                    ProgressView().tint(foreground)
+                } else {
+                    if let icon { Image(systemName: icon) }
+                    Text(title)
+                }
             }
             .font(BSFont.sans(15, style == .primary ? .bold : .semibold))
             .frame(maxWidth: fullWidth ? .infinity : nil, minHeight: 26)
@@ -34,8 +41,10 @@ struct BSButton: View {
                     .strokeBorder(border, lineWidth: style == .ghost ? 1 : 0)
             )
             .clipShape(RoundedRectangle(cornerRadius: BSRadius.m))
+            .opacity(isEnabled && !isLoading ? 1 : 0.55)
         }
         .buttonStyle(.plain)
+        .disabled(isLoading)
     }
 
     private var foreground: Color {

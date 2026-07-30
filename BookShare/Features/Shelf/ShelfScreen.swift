@@ -9,7 +9,11 @@
 import SwiftUI
 
 struct ShelfScreen: View {
-    private let books = SampleData.shelf
+    @State private var books: [Book] = []
+    @State private var loaded = false
+    @State private var showScanner = false
+
+    private let repo = BooksRepository()
 
     private var available: Int { books.filter { $0.status == .available }.count }
     private var onLoan: Int { books.filter { $0.status == .onLoan }.count }
@@ -22,12 +26,15 @@ struct ShelfScreen: View {
                         .font(BSFont.title)
                         .foregroundStyle(BSColor.ink)
                     Spacer()
-                    Image(systemName: "plus")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(BSColor.onRust)
-                        .frame(width: 40, height: 40)
-                        .background(BSColor.rust)
-                        .clipShape(Circle())
+                    Button { showScanner = true } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(BSColor.onRust)
+                            .frame(width: 40, height: 40)
+                            .background(BSColor.rust)
+                            .clipShape(Circle())
+                    }
+                    .accessibilityLabel("Add a book")
                 }
                 .padding(.top, BSSpace.s)
 
@@ -38,21 +45,58 @@ struct ShelfScreen: View {
                 }
 
                 BSButton(title: "Scan a book's barcode", icon: "barcode.viewfinder",
-                         style: .ghost) {}
+                         style: .ghost) { showScanner = true }
 
                 Text("Listed books")
                     .font(BSFont.serif(18, .bold))
                     .foregroundStyle(BSColor.ink)
                     .padding(.top, BSSpace.xs)
 
-                ForEach(books) { book in
-                    BSBookCard(book: book, showLocation: false)
+                if books.isEmpty && loaded {
+                    ShelfEmptyState()
+                } else {
+                    ForEach(books) { book in
+                        BSBookCard(book: book, showLocation: false)
+                    }
                 }
             }
             .padding(.horizontal, BSSpace.xl)
             .padding(.bottom, BSSpace.xl)
         }
         .background(BSColor.paper)
+        .task { await load() }
+        .refreshable { await load() }
+        .onAppear { if AppLaunch.scanDemo { showScanner = true } }
+        .fullScreenCover(isPresented: $showScanner) {
+            ScannerView {
+                // Published a book: close the scanner and refresh the shelf.
+                showScanner = false
+                Task { await load() }
+            }
+        }
+    }
+
+    private func load() async {
+        if AppLaunch.offlinePreview {
+            books = SampleData.shelf; loaded = true; return
+        }
+        books = (try? await repo.myShelf()) ?? []
+        loaded = true
+    }
+}
+
+private struct ShelfEmptyState: View {
+    var body: some View {
+        VStack(spacing: BSSpace.s) {
+            Image(systemName: "books.vertical").font(.system(size: 30)).foregroundStyle(BSColor.muted)
+            Text("Your shelf is empty")
+                .font(BSFont.serif(17, .bold)).foregroundStyle(BSColor.ink)
+            Text("List a book you're happy to lend and neighbors nearby will find it on Discover.")
+                .font(BSFont.body).foregroundStyle(BSColor.muted)
+                .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, BSSpace.xl)
     }
 }
 

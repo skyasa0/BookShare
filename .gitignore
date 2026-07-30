@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# Xcode
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+
+# Secrets — never commit real provider keys (referenced via env in supabase/config.toml)
+.env
+.env.*
+!.env.example

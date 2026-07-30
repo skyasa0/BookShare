@@ -10,7 +10,9 @@
 import SwiftUI
 
 struct HomeScreen: View {
-    private let loans = SampleData.homeQueue
+    // Loans are a later phase (no loans table yet). In offline preview we still
+    // show the sample queue to exercise the loan UI; live mode shows an empty state.
+    private var loans: [Loan] { AppLaunch.offlinePreview ? SampleData.homeQueue : [] }
 
     var body: some View {
         ScrollView {
@@ -20,22 +22,38 @@ struct HomeScreen: View {
                     .foregroundStyle(BSColor.ink)
                     .padding(.top, BSSpace.s)
 
-                // Gentle nudge banner — the product does the nagging.
-                NudgeBanner()
-
-                Text("Your loans")
-                    .font(BSFont.serif(18, .bold))
-                    .foregroundStyle(BSColor.ink)
-                    .padding(.top, BSSpace.xs)
-
-                ForEach(loans) { loan in
-                    LoanRow(loan: loan)
+                if loans.isEmpty {
+                    HomeEmptyState()
+                } else {
+                    NudgeBanner()
+                    Text("Your loans")
+                        .font(BSFont.serif(18, .bold))
+                        .foregroundStyle(BSColor.ink)
+                        .padding(.top, BSSpace.xs)
+                    ForEach(loans) { loan in
+                        LoanRow(loan: loan)
+                    }
                 }
             }
             .padding(.horizontal, BSSpace.xl)
             .padding(.bottom, BSSpace.xl)
         }
         .background(BSColor.paper)
+    }
+}
+
+private struct HomeEmptyState: View {
+    var body: some View {
+        VStack(spacing: BSSpace.m) {
+            Spacer(minLength: 80)
+            Image(systemName: "tray").font(.system(size: 34)).foregroundStyle(BSColor.muted)
+            Text("No loans in flight")
+                .font(BSFont.serif(19, .bold)).foregroundStyle(BSColor.ink)
+            Text("When you request a book from a neighbor — or someone asks for one of yours — it'll show up here, from request to return.")
+                .font(BSFont.body).foregroundStyle(BSColor.muted)
+                .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
