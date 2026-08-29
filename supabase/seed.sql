@@ -60,3 +60,16 @@ begin
         values (uid, r.title, r.author, r.genre::book_genre, r.cover, r.status::loan_status, r.rating);
     end loop;
 end $$;
+
+-- Demo phone numbers for the seeded neighbors so the optional "Message on WhatsApp"
+-- handoff button has something to link to (not real numbers).
+with numbered as (
+    select p.id, row_number() over (order by u.email) as n
+    from public.profiles p
+    join auth.users u on u.id = p.id
+    where u.email like '%@seed.bookshare.test'
+)
+update public.profiles p
+   set phone = '+1555' || lpad((1000 + n.n)::text, 7, '0')
+  from numbered n
+ where p.id = n.id;

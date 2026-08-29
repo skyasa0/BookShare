@@ -23,13 +23,19 @@ struct DiscoverScreen: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            BSChipRow(items: Book.Genre.allCases, title: { $0.rawValue }, selection: $genre)
-                .padding(.bottom, BSSpace.m)
-            content
+        NavigationStack {
+            VStack(spacing: 0) {
+                header
+                BSChipRow(items: Book.Genre.allCases, title: { $0.rawValue }, selection: $genre)
+                    .padding(.bottom, BSSpace.m)
+                content
+            }
+            .background(BSColor.paper)
+            .navigationDestination(for: Book.self) { book in
+                BookDetailView(book: book, onRequested: { Task { await load() } })
+            }
         }
-        .background(BSColor.paper)
+        .tint(BSColor.rust)
         .task { await load() }
     }
 
@@ -67,7 +73,10 @@ struct DiscoverScreen: View {
         case .loaded:
             ScrollView {
                 LazyVStack(spacing: BSSpace.m) {
-                    ForEach(filtered) { BSBookCard(book: $0) }
+                    ForEach(filtered) { book in
+                        NavigationLink(value: book) { BSBookCard(book: book) }
+                            .buttonStyle(.plain)
+                    }
                 }
                 .padding(.horizontal, BSSpace.xl)
                 .padding(.bottom, BSSpace.xl)

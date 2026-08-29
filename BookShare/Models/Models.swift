@@ -61,18 +61,44 @@ struct Book: Identifiable, Hashable {
 }
 
 struct Loan: Identifiable {
-    let id = UUID()
+    let id: UUID
     let book: Book
     var status: LoanStatus
-    let counterparty: String   // the other neighbor on this loan
+    let counterparty: String       // the other neighbor on this loan
+    let counterpartyPhone: String? // revealed only once accepted (for WhatsApp)
     let dueDate: Date?
-    let isLender: Bool         // true = you're lending, false = you're borrowing
+    let isLender: Bool             // true = you're lending, false = you're borrowing
+    // Handoff coordination (accepted stage)
+    let handoffPlace: String?
+    let handoffTime: Date?
+    let handoffProposedByMe: Bool
+
+    init(id: UUID = UUID(), book: Book, status: LoanStatus, counterparty: String,
+         counterpartyPhone: String? = nil, dueDate: Date? = nil, isLender: Bool,
+         handoffPlace: String? = nil, handoffTime: Date? = nil, handoffProposedByMe: Bool = false) {
+        self.id = id; self.book = book; self.status = status
+        self.counterparty = counterparty; self.counterpartyPhone = counterpartyPhone
+        self.dueDate = dueDate; self.isLender = isLender
+        self.handoffPlace = handoffPlace; self.handoffTime = handoffTime
+        self.handoffProposedByMe = handoffProposedByMe
+    }
+
+    /// Whether a handoff spot/time has been proposed.
+    var hasHandoffProposal: Bool { handoffPlace != nil }
 
     var dueLabel: String? {
         guard let dueDate else { return nil }
         let f = DateFormatter()
         f.dateFormat = "MMM d"
         return "Due \(f.string(from: dueDate))"
+    }
+
+    var handoffLabel: String? {
+        guard let place = handoffPlace else { return nil }
+        guard let time = handoffTime else { return place }
+        let f = DateFormatter()
+        f.dateFormat = "EEE MMM d, h:mm a"
+        return "\(place) · \(f.string(from: time))"
     }
 }
 
